@@ -23,75 +23,65 @@ public class DiscountProcessingServiceImpl implements DiscountProcessingService 
 
     @Override
     public DiscountProcessingResult calculate(UUID productId, int quantity) {
-        ProductModel product = productService.getProduct(productId);
-        Map<DiscountType, DiscountPolicyModel> applicableDiscounts = getApplicableDiscounts(product, quantity);
+        var product = productService.getProduct(productId);
+        var applicableDiscounts = getApplicableDiscounts(product, quantity);
 
-        BigDecimal totalPrice = calculateTotalPrice(product.getPrice(), quantity);
-        BigDecimal totalDiscount = calculateTotalDiscount(totalPrice, applicableDiscounts);
-        BigDecimal finalPrice = calculateFinalPrice(totalPrice, totalDiscount);
+        var totalPrice = product.getPrice().multiply(BigDecimal.valueOf(quantity));
+        var totalDiscount = calculateTotalDiscount(totalPrice, applicableDiscounts);
+        var finalPrice = calculateFinalPrice(totalPrice, totalDiscount);
 
-        return buildResult(totalPrice, totalDiscount, finalPrice);
+        return DiscountProcessingResult.builder()
+                .totalPrice(totalPrice)
+                .discount(totalDiscount)
+                .finalPrice(finalPrice)
+                .build();
     }
 
     private Map<DiscountType, DiscountPolicyModel> getApplicableDiscounts(ProductModel product, int quantity) {
-        Map<DiscountType, DiscountPolicyModel> applicablePolicies = new HashMap<>();
+        var applicableDiscounts = new HashMap<DiscountType, DiscountPolicyModel>();
 
         for (DiscountPolicyModel policy : product.getDiscountPolicies()) {
             if (isDiscountApplicable(policy, quantity)) {
-                updateApplicablePolicies(applicablePolicies, policy);
+                updateApplicableDiscounts(applicableDiscounts, policy);
             }
         }
 
-        return applicablePolicies;
+        return applicableDiscounts;
     }
 
     private boolean isDiscountApplicable(DiscountPolicyModel policy, int quantity) {
-        return policy != null && 
-               policy.getValue() != null &&
-               quantity >= policy.getThreshold();
+        return policy != null &&
+                policy.getValue() != null &&
+                quantity >= policy.getThreshold();
     }
 
-    private void updateApplicablePolicies(
-            Map<DiscountType, DiscountPolicyModel> applicablePolicies, 
-            DiscountPolicyModel newPolicy) {
-        applicablePolicies.merge(
+    private void updateApplicableDiscounts(Map<DiscountType, DiscountPolicyModel> applicableDiscounts,
+                                           DiscountPolicyModel newPolicy) {
+        applicableDiscounts.merge(
                 newPolicy.getType(),
                 newPolicy,
-                (existing, candidate) -> 
-                    candidate.getThreshold() > existing.getThreshold() ? candidate : existing
+                (existing, candidate) -> candidate.getThreshold() > existing.getThreshold() ? candidate : existing
         );
     }
 
-    private BigDecimal calculateTotalPrice(BigDecimal unitPrice, int quantity) {
-        return unitPrice.multiply(BigDecimal.valueOf(quantity));
-    }
+    private BigDecimal calculateTotalDiscount(BigDecimal totalPrice,
+                                              Map<DiscountType, DiscountPolicyModel> applicableDiscounts) {
 
-    private BigDecimal calculateTotalDiscount(
-            BigDecimal totalPrice,
-            Map<DiscountType, DiscountPolicyModel> applicableDiscounts) {
-        return applicableDiscounts.entrySet().stream()
-                .map(entry -> calculateDiscountForPolicy(totalPrice, entry.getValue()))
+        return applicableDiscounts.values().stream()
+                .map(discountPolicy -> calculateDiscountByPolicy(totalPrice, discountPolicy))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    private BigDecimal calculateDiscountForPolicy(BigDecimal totalPrice, DiscountPolicyModel policy) {
+    private BigDecimal calculateDiscountByPolicy(BigDecimal totalPrice, DiscountPolicyModel policy) {
         var strategy = discountCalculationFactory.getStrategy(policy.getType());
         return strategy.calculateDiscount(totalPrice, policy.getValue());
     }
 
     private BigDecimal calculateFinalPrice(BigDecimal totalPrice, BigDecimal totalDiscount) {
-        return totalPrice.subtract(totalDiscount)
-                .setScale(2, RoundingMode.HALF_EVEN);
-    }
-
-    private DiscountProcessingResult buildResult(
-            BigDecimal totalPrice,
-            BigDecimal discount,
-            BigDecimal finalPrice) {
-        return DiscountProcessingResult.builder()
-                .totalPrice(totalPrice)
-                .discount(discount)
-                .finalPrice(finalPrice)
-                .build();
+        var finalPrice = totalPrice.subtract(totalDiscount);
+        if (finalPrice.compareTo(BigDecimal.ZERO) < 0) {
+            return BigDecimal.ZERO;
+        }
+        return finalPrice.setScale(2, RoundingMode.HALF_EVEN);
     }
 }

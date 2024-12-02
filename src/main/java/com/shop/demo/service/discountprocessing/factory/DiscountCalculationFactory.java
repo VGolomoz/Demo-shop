@@ -16,15 +16,15 @@ import java.util.Map;
 public class DiscountCalculationFactory {
     private final AmountDiscountStrategy amountDiscountStrategy;
     private final PercentageDiscountStrategy percentageDiscountStrategy;
-    
+
     private final Map<DiscountType, DiscountCalculationStrategy> strategies = new EnumMap<>(DiscountType.class);
 
     public DiscountCalculationStrategy getStrategy(DiscountType discountType) {
         if (strategies.isEmpty()) {
             initializeStrategies();
         }
-        
-        DiscountCalculationStrategy strategy = strategies.get(discountType);
+
+        var strategy = strategies.get(discountType);
         if (strategy == null) {
             throw new UnsupportedDiscountTypeException("Unsupported discount type: " + discountType);
         }

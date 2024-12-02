@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 
 import static com.shop.demo.exception.ServiceErrorCode.FIELD_VALIDATION;
 
-//@RestControllerAdvice
+@RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(value = {AbstractShopDemoException.class})
@@ -23,7 +23,6 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(ex.getErrorStatus())
                 .body(buildErrorResponse(ex));
-
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
