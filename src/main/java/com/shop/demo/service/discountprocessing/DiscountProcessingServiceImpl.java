@@ -2,7 +2,7 @@ package com.shop.demo.service.discountprocessing;
 
 import com.shop.demo.persistence.discountpolicy.entity.DiscountType;
 import com.shop.demo.service.discountpolicy.model.DiscountPolicyModel;
-import com.shop.demo.service.discountprocessing.exception.UnsupportedDiscountTypeException;
+import com.shop.demo.service.discountprocessing.factory.DiscountCalculationFactory;
 import com.shop.demo.service.discountprocessing.model.DiscountProcessingResult;
 import com.shop.demo.service.product.ProductService;
 import com.shop.demo.service.product.model.ProductModel;
@@ -19,53 +19,79 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DiscountProcessingServiceImpl implements DiscountProcessingService {
     private final ProductService productService;
+    private final DiscountCalculationFactory discountCalculationFactory;
 
     @Override
     public DiscountProcessingResult calculate(UUID productId, int quantity) {
-        var product = productService.getProduct(productId);
-        var discountPolicies = getApplicableDiscounts(product, quantity);
+        ProductModel product = productService.getProduct(productId);
+        Map<DiscountType, DiscountPolicyModel> applicableDiscounts = getApplicableDiscounts(product, quantity);
 
-        BigDecimal totalPrice = product.getPrice().multiply(BigDecimal.valueOf(quantity));
-        BigDecimal discount = calculateDiscount(totalPrice, discountPolicies);
-        BigDecimal finalPrice = totalPrice.subtract(discount).setScale(2, RoundingMode.HALF_EVEN);
+        BigDecimal totalPrice = calculateTotalPrice(product.getPrice(), quantity);
+        BigDecimal totalDiscount = calculateTotalDiscount(totalPrice, applicableDiscounts);
+        BigDecimal finalPrice = calculateFinalPrice(totalPrice, totalDiscount);
 
-        return DiscountProcessingResult.builder()
-                .totalPrice(totalPrice)
-                .discount(discount)
-                .finalPrice(finalPrice)
-                .build();
+        return buildResult(totalPrice, totalDiscount, finalPrice);
     }
 
     private Map<DiscountType, DiscountPolicyModel> getApplicableDiscounts(ProductModel product, int quantity) {
         Map<DiscountType, DiscountPolicyModel> applicablePolicies = new HashMap<>();
 
         for (DiscountPolicyModel policy : product.getDiscountPolicies()) {
-            if (quantity >= policy.getThreshold()) {
-                applicablePolicies.merge(
-                        policy.getType(),
-                        policy,
-                        (existing, candidate) -> candidate.getThreshold() > existing.getThreshold() ? candidate : existing
-                );
+            if (isDiscountApplicable(policy, quantity)) {
+                updateApplicablePolicies(applicablePolicies, policy);
             }
         }
 
         return applicablePolicies;
     }
 
-    private BigDecimal calculateDiscount(BigDecimal totalPrice, Map<DiscountType, DiscountPolicyModel> policies) {
-        BigDecimal discount = BigDecimal.ZERO;
+    private boolean isDiscountApplicable(DiscountPolicyModel policy, int quantity) {
+        return policy != null && 
+               policy.getValue() != null &&
+               quantity >= policy.getThreshold();
+    }
 
-        for (DiscountPolicyModel policy : policies.values()) {
-            switch (policy.getType()) {
-                case AMOUNT -> discount = discount.add(policy.getValue());
-                case PERCENTAGE -> {
-                    BigDecimal discountValue = totalPrice.multiply(policy.getValue())
-                            .divide(BigDecimal.valueOf(100), RoundingMode.HALF_EVEN);
-                    discount = discount.add(discountValue);
-                }
-                default -> throw new UnsupportedDiscountTypeException("Unsupported discount type: " + policy.getType());
-            }
-        }
-        return discount;
+    private void updateApplicablePolicies(
+            Map<DiscountType, DiscountPolicyModel> applicablePolicies, 
+            DiscountPolicyModel newPolicy) {
+        applicablePolicies.merge(
+                newPolicy.getType(),
+                newPolicy,
+                (existing, candidate) -> 
+                    candidate.getThreshold() > existing.getThreshold() ? candidate : existing
+        );
+    }
+
+    private BigDecimal calculateTotalPrice(BigDecimal unitPrice, int quantity) {
+        return unitPrice.multiply(BigDecimal.valueOf(quantity));
+    }
+
+    private BigDecimal calculateTotalDiscount(
+            BigDecimal totalPrice,
+            Map<DiscountType, DiscountPolicyModel> applicableDiscounts) {
+        return applicableDiscounts.entrySet().stream()
+                .map(entry -> calculateDiscountForPolicy(totalPrice, entry.getValue()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal calculateDiscountForPolicy(BigDecimal totalPrice, DiscountPolicyModel policy) {
+        var strategy = discountCalculationFactory.getStrategy(policy.getType());
+        return strategy.calculateDiscount(totalPrice, policy.getValue());
+    }
+
+    private BigDecimal calculateFinalPrice(BigDecimal totalPrice, BigDecimal totalDiscount) {
+        return totalPrice.subtract(totalDiscount)
+                .setScale(2, RoundingMode.HALF_EVEN);
+    }
+
+    private DiscountProcessingResult buildResult(
+            BigDecimal totalPrice,
+            BigDecimal discount,
+            BigDecimal finalPrice) {
+        return DiscountProcessingResult.builder()
+                .totalPrice(totalPrice)
+                .discount(discount)
+                .finalPrice(finalPrice)
+                .build();
     }
 }

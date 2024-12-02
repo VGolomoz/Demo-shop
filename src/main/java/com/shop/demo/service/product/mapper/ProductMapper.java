@@ -7,6 +7,8 @@ import com.shop.demo.service.product.model.ProductModel;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 @RequiredArgsConstructor
 public class ProductMapper {
@@ -24,6 +26,10 @@ public class ProductMapper {
                 .price(entity.getPrice())
                 .discountPolicies(discountPolicies)
                 .build();
+    }
+
+    public List<ProductResponse> modelToResponse(List<ProductModel> models) {
+        return models.stream().map(this::modelToResponse).toList();
     }
 
     public ProductResponse modelToResponse(ProductModel model) {

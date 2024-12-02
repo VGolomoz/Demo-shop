@@ -10,10 +10,12 @@ import com.shop.demo.service.product.excpetion.ProductNotFoundException;
 import com.shop.demo.service.product.mapper.ProductMapper;
 import com.shop.demo.service.product.model.ProductModel;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -58,6 +60,14 @@ public class ProductServiceImpl implements ProductService {
         return productRepository.findById(id)
                 .map(mapper::entityToModel)
                 .orElseThrow(() -> new ProductNotFoundException("Product with id=" + id + " not found"));
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public List<ProductModel> getAllProducts(Pageable pageable) {
+        return productRepository.findAll(pageable)
+                .map(mapper::entityToModel)
+                .toList();
     }
 
     @Transactional
