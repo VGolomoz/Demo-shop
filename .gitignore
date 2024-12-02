@@ -28,11 +28,6 @@ logs/
 *.war
 *.jar
 
-# Sensitive files
-application.properties
-application.yml
-.env
-
 # Dependency directories
 lib/
 node_modules/

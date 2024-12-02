@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: demo-shop
+  datasource:
+    url: jdbc:h2:mem:shopdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /api/swagger-ui.html
